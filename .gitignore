@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+*.local.json
+.venv/
+.tools/
+dist/
+.workbuddy/
+.codex/

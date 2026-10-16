@@ -1,0 +1,17 @@
+{
+  "format": "mcfuke.recipe.v1",
+  "name": "板烧鸡腿堡与无糖可乐中杯",
+  "budget_fen": 4000,
+  "slots": [
+    {
+      "label": "主食",
+      "quantity": 1,
+      "choices": [{"name": "板烧鸡腿堡", "options": {}}]
+    },
+    {
+      "label": "饮料",
+      "quantity": 1,
+      "choices": [{"name": "无糖可口可乐中杯", "options": {"糖": "无糖", "规格": "中杯"}}]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "format": "mcfuke.recipe.v1",
+  "name": "模拟午餐配方：鸡肉主食与无糖饮料",
+  "budget_fen": 3000,
+  "slots": [
+    {
+      "label": "主食",
+      "quantity": 1,
+      "choices": [
+        {"name": "测试鸡肉堡A", "options": {}},
+        {"name": "测试鸡肉堡B", "options": {}}
+      ]
+    },
+    {
+      "label": "饮料",
+      "quantity": 1,
+      "choices": [{"name": "测试饮料", "options": {"糖": "无糖"}}]
+    }
+  ]
+}
