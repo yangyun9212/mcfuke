@@ -1,0 +1,20 @@
+{
+  "format": "mcfuke.recipe.v1",
+  "name": "板烧配无糖可乐，中杯优先、允许大杯",
+  "budget_fen": 3300,
+  "slots": [
+    {
+      "label": "主食",
+      "quantity": 1,
+      "choices": [{"name": "板烧鸡腿堡", "options": {}}]
+    },
+    {
+      "label": "饮料",
+      "quantity": 1,
+      "choices": [
+        {"name": "无糖可口可乐中杯", "options": {"糖": "无糖", "规格": "中杯"}},
+        {"name": "无糖可口可乐大杯", "options": {"糖": "无糖", "规格": "大杯"}}
+      ]
+    }
+  ]
+}

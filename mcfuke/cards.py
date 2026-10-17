@@ -24,13 +24,13 @@ def wrap(value, width=52):
     return lines + [line] if line else lines
 
 
-def render_result_card(job, receipts, historical_at=None, now=None):
+def render_result_card(job, receipts, historical_at=None, now=None, current_intent=None, confirmation=None):
     """Reassess evidence before rendering. Historical time always changes the badge."""
     current = now or datetime.now(timezone.utc)
     evaluation = timestamp(historical_at) if historical_at else current
     if evaluation > current:
         raise RecipeError("历史复核时间不能晚于当前时间")
-    result = assess_job(job, receipts, now=evaluation)
+    result = assess_job(job, receipts, now=evaluation, current_intent=current_intent, confirmation=confirmation)
     recipe = validate_recipe(job["recipe"])
     historical = historical_at is not None or result["mode"] == "recorded"
     badge = ("纯模拟 · 虚构数据" if result["mode"] == "simulated" else
@@ -83,6 +83,16 @@ def render_result_card(job, receipts, historical_at=None, now=None):
     paragraph("餐单与变化", 21, "#20242a", x=32, bold=True)
     paragraph(recipe["name"], 16, x=32, width=680)
     y += 12
+    if "intent_summary" in job:
+        paragraph("必须保留", 17, "#20242a", x=32, bold=True)
+        for slot in job["intent_summary"]["must_keep"]["slots"]:
+            required = "、".join(f"{k}：{v}" for k, v in slot["options"].items())
+            paragraph(f"{slot['label']} × {slot['quantity']}" + (" · " + required if required else ""), 16, x=32, width=680)
+        paragraph("偏好与允许变化", 17, "#20242a", x=32, bold=True)
+        for slot in job["intent_summary"]["allowed_changes"]:
+            names = " → ".join(c["name"] for c in slot["choices"])
+            paragraph(f"{slot['label']}：{names}；{slot['description']}", 16, x=32, width=680)
+        y += 12
     if row:
         complete = result["quoted_count"] == result["candidate_count"]
         by_request = {fingerprint(r["request"]): r for r in receipts["quotes"]}
@@ -136,7 +146,8 @@ def render_result_card(job, receipts, historical_at=None, now=None):
     observed = row["called_at"] if row else job["observed_at"]
     shown_time = timestamp(observed).strftime("%Y.%m.%d %H:%M %z")
     paragraph(f"{shown_time}  ·  已核价 {result['quoted_count']}/{result['candidate_count']} 份候选", 14, x=32)
-    paragraph("报价需重查 · 未创建订单" if historical else "价格以本轮核价为准 · 未创建订单", 14, x=32)
+    paragraph("虚构价格 · 未创建订单" if result["mode"] == "simulated" else
+              "报价需重查 · 未创建订单" if historical else "价格以本轮核价为准 · 未创建订单", 14, x=32)
     if result["mode"] == "simulated":
         paragraph("纯模拟 · 虚构数据", 14, x=32)
     if result.get("search_truncated"):

@@ -113,12 +113,14 @@ def prepare_job(recipe, bindings):
     return job
 
 
-def assess_job(job, receipts, now=None):
+def assess_job(job, receipts, now=None, current_intent=None, confirmation=None):
     if job.get("format") != "mcfuke.quote-job.v1" or job.get("status") not in ("awaiting_quotes", "needs_input"):
         raise RecipeError("任务尚未准备好核价")
     unsigned = {k: v for k, v in job.items() if k != "job_fingerprint"}
     if fingerprint(unsigned) != job.get("job_fingerprint"):
         raise RecipeError("任务内容已变更，需重新生成候选")
+    from .intent import check_job_conditions
+    check_job_conditions(job, current_intent, confirmation)
     _keys(receipts, ("format", "mode", "quotes"))
     if receipts["format"] != "mcfuke.receipts.v1" or receipts["mode"] != job["mode"]:
         raise RecipeError("报价模式与任务不一致")

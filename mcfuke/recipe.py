@@ -6,7 +6,7 @@ Prices must come from the gateway's whole-cart quote, never menu arithmetic.
 
 from copy import deepcopy
 from hashlib import sha256
-from itertools import islice, product
+import heapq
 import json
 import unicodedata
 
@@ -110,6 +110,7 @@ def resolve_recipe(recipe, menu, max_candidates=5):
     pools = []
     for slot in recipe["slots"]:
         matches = []
+        matched_items = set()
         for rank, choice in enumerate(slot["choices"]):
             for item in menu:
                 if item.get("available") is not True or item.get("name") != choice["name"]:
@@ -124,6 +125,10 @@ def resolve_recipe(recipe, menu, max_candidates=5):
                     continue
                 if not isinstance(item.get("sku"), str) or not item["sku"]:
                     continue
+                identity = fingerprint({"sku": item["sku"], "name": item["name"], "options": options})
+                if identity in matched_items:
+                    continue
+                matched_items.add(identity)
                 matches.append({
                     "slot": slot["label"], "name": item["name"], "sku": item["sku"],
                     "quantity": slot["quantity"], "options": deepcopy(options),
@@ -139,7 +144,18 @@ def resolve_recipe(recipe, menu, max_candidates=5):
         total_combinations *= len(pool)
     candidates = []
     seen = set()
-    for combination in islice(product(*pools), max_candidates):
+    start = tuple(0 for _ in pools)
+    pending = [(sum(pool[0]["preference_rank"] for pool in pools), start)]
+    visited = {start}
+    while pending and len(candidates) < max_candidates:
+        _, indices = heapq.heappop(pending)
+        combination = tuple(pool[index] for pool, index in zip(pools, indices))
+        for dimension, pool in enumerate(pools):
+            neighbor = tuple(index + (1 if pos == dimension else 0) for pos, index in enumerate(indices))
+            if neighbor[dimension] < len(pool) and neighbor not in visited:
+                visited.add(neighbor)
+                rank = sum(pool[index]["preference_rank"] for pool, index in zip(pools, neighbor))
+                heapq.heappush(pending, (rank, neighbor))
         cart = [{k: item[k] for k in ("slot", "name", "sku", "quantity", "options")}
                 for item in combination]
         cart_hash = fingerprint(cart)

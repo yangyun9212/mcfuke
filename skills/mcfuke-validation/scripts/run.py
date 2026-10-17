@@ -18,6 +18,7 @@ from mcfuke.__main__ import SimulatedStore  # noqa: E402
 from mcfuke.recipe import execute_recipe  # noqa: E402
 from mcfuke.workflow import prepare_job, assess_job, share_recipe  # noqa: E402
 from mcfuke.cards import render_result_card  # noqa: E402
+from mcfuke.intent import review_intent, confirm_intent, prepare_intent_job, share_intent  # noqa: E402
 import json  # noqa: E402
 
 
@@ -30,25 +31,52 @@ def main():
     demo.add_argument("--scenario", choices=("all", "original", "alternative", "overbudget", "unknown"),
                       default="all")
     prepare = sub.add_parser("prepare", help="生成交给宿主MCP执行的核价请求，不联网")
-    prepare.add_argument("--recipe", type=Path, required=True)
+    prepare_source = prepare.add_mutually_exclusive_group(required=True)
+    prepare_source.add_argument("--recipe", type=Path)
+    prepare_source.add_argument("--intent", type=Path)
+    prepare.add_argument("--confirmation", type=Path)
     prepare.add_argument("--bindings", type=Path, required=True)
     prepare.add_argument("--output", type=Path, required=True)
     assess = sub.add_parser("assess", help="核对本轮请求与报价回执，不认证官方来源")
     assess.add_argument("--job", type=Path, required=True)
     assess.add_argument("--receipts", type=Path, required=True)
     assess.add_argument("--output", type=Path, required=True)
+    assess.add_argument("--intent", type=Path)
+    assess.add_argument("--confirmation", type=Path)
     card = sub.add_parser("card", help="复核回执并生成本地SVG结果卡，不发布")
     card.add_argument("--job", type=Path, required=True)
     card.add_argument("--receipts", type=Path, required=True)
     card.add_argument("--output", type=Path, required=True)
     card.add_argument("--historical-at", help="历史复核时点ISO8601；显式标记历史回放")
+    card.add_argument("--intent", type=Path)
+    card.add_argument("--confirmation", type=Path)
     share = sub.add_parser("share", help="生成不含门店、券或报价的本地分享包")
-    share.add_argument("--recipe", type=Path, required=True)
+    share_source = share.add_mutually_exclusive_group(required=True)
+    share_source.add_argument("--recipe", type=Path)
+    share_source.add_argument("--intent", type=Path)
     share.add_argument("--output", type=Path, required=True)
+    review = sub.add_parser("review", help="展示必须条件、偏好和允许替代；不代表确认")
+    review.add_argument("--intent", type=Path, required=True)
+    review.add_argument("--output", type=Path, required=True)
+    confirm = sub.add_parser("confirm", help="用户明确接受展示条件后记录该条件版本，不是下单授权")
+    confirm.add_argument("--intent", type=Path, required=True)
+    confirm.add_argument("--reviewed-fingerprint", required=True)
+    confirm.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     try:
+        def read_json(path):
+            with path.open(encoding="utf-8-sig") as stream:
+                raw = stream.read(1048577)
+            if len(raw) > 1048576:
+                raise RecipeError("输入文件过大")
+            return json.loads(raw)
+
+        def context():
+            return {"current_intent": read_json(args.intent) if args.intent else None,
+                    "confirmation": read_json(args.confirmation) if args.confirmation else None}
+
         if args.command == "validate":
             value = load_recipe(args.recipe)
             print(json.dumps({"format_valid": True, "official_source_verified": False,
@@ -66,32 +94,41 @@ def main():
         elif args.command == "share":
             if args.output.suffix != ".zip":
                 raise RecipeError("分享包需为ZIP")
-            share_recipe(load_recipe(args.recipe), args.output)
+            if args.intent:
+                share_intent(read_json(args.intent), args.output)
+            else:
+                share_recipe(load_recipe(args.recipe), args.output)
             print(json.dumps({"ok": True, "published": False, "order_created": False}))
         else:
-            def read_json(path):
-                with path.open(encoding="utf-8-sig") as stream:
-                    raw = stream.read(1048577)
-                if len(raw) > 1048576:
-                    raise RecipeError("输入文件过大")
-                return json.loads(raw)
-            if args.command == "prepare":
-                result = prepare_job(load_recipe(args.recipe), read_json(args.bindings))
+            if args.command == "review":
+                result = review_intent(read_json(args.intent))
+            elif args.command == "confirm":
+                result = confirm_intent(read_json(args.intent), args.reviewed_fingerprint)
+            elif args.command == "prepare":
+                if args.intent:
+                    if not args.confirmation:
+                        raise RecipeError("条件执行前需要当前确认文件")
+                    result = prepare_intent_job(read_json(args.intent), read_json(args.confirmation), read_json(args.bindings))
+                else:
+                    if args.confirmation:
+                        raise RecipeError("确认文件必须与intent一起使用")
+                    result = prepare_job(load_recipe(args.recipe), read_json(args.bindings))
             elif args.command == "card":
                 if args.output.suffix != ".svg":
                     raise RecipeError("结果卡需为SVG")
-                content = render_result_card(read_json(args.job), read_json(args.receipts), args.historical_at)
+                content = render_result_card(read_json(args.job), read_json(args.receipts), args.historical_at, **context())
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(content, encoding="utf-8")
                 print(json.dumps({"ok": True, "published": False, "order_created": False}))
                 return 0
             else:
-                result = assess_job(read_json(args.job), read_json(args.receipts))
+                result = assess_job(read_json(args.job), read_json(args.receipts), **context())
             if args.output.suffix != ".json":
                 raise RecipeError("结果需为JSON")
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            print(json.dumps({"status": result["status"], "orderable": False}, ensure_ascii=False))
+            print(json.dumps({"status": result.get("status", "review_required" if args.command == "review" else "conditions_recorded"),
+                              "orderable": False}, ensure_ascii=False))
         return 0
     except RecipeError as error:
         print(json.dumps({"ok": False, "reason": "validation_failed", "detail": str(error)}, ensure_ascii=False))

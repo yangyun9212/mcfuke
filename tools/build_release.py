@@ -10,21 +10,27 @@ import zipfile
 from tools.build_validation_skill import build as build_skill
 from mcfuke.recipe import load_recipe
 from mcfuke.workflow import share_recipe
+from mcfuke.intent import share_intent
 
 ROOT = Path(__file__).resolve().parents[1]
 DECLARATION_SHA256 = "cd28101bcb29cc8fb24b372fe91ce6b42c4a1487a54e01f7ade0c8c6a84241b7"
 PUBLIC_FILES = (
-    "README.md", "VERSION", "LICENSE", "NOTICE.md", "CHANGELOG.md", ".gitignore",
+    "README.md", "VERSION", "LICENSE", "NOTICE.md", "CHANGELOG.md", "ROADMAP.md", ".gitignore",
     "CONTEST_DECLARATION.md", "MCP_INTEGRATION.md", "mcp-config.example.json", "workbuddy.md",
     "docs/INSTALL.md", "docs/VALIDATION.md", "docs/CONTEST_SUBMISSION.md", "docs/DEMO.md",
     "docs/assets/result-overbudget.png", "docs/assets/result-overbudget.svg",
-    "mcfuke/__init__.py", "mcfuke/__main__.py", "mcfuke/recipe.py", "mcfuke/workflow.py", "mcfuke/cards.py",
+    "docs/assets/result-conditions-simulated.png", "docs/assets/result-conditions-simulated.svg",
+    "docs/assets/result-conditions-workbuddy.png",
+    "mcfuke/__init__.py", "mcfuke/__main__.py", "mcfuke/recipe.py", "mcfuke/workflow.py", "mcfuke/cards.py", "mcfuke/intent.py",
     "examples/lunch.recipe.json", "examples/grilled-chicken.recipe.json", "examples/replacement.recipe.json",
+    "examples/sugar-free-flex-cup.recipe.json", "examples/flexible-cup.intent.json",
     "skills/mcfuke-validation/SKILL.md", "skills/mcfuke-validation/scripts/run.py",
     "skills/mcfuke-validation/references/live-validation.md", "skills/mcfuke-validation/references/workflow.md",
+    "skills/mcfuke-validation/references/intent.md",
     "tools/build_validation_skill.py", "tools/build_release.py", "tools/audit_live_validation.py",
     "tests/test_recipe.py", "tests/test_workflow.py", "tests/test_cards.py",
     "tests/test_live_audit.py", "tests/test_skill_package.py", "tests/test_release_package.py",
+    "tests/test_cup_choices.py", "tests/test_intent.py",
 )
 SECRET_PATTERNS = (
     re.compile(rb"Bearer\s+(?!\$\{[A-Z_]+\})[A-Za-z0-9._~+/=-]{16,}"),
@@ -62,9 +68,13 @@ def build():
         raise ValueError("Config must use only an environment placeholder")
     files = {name: (ROOT / name).read_bytes() for name in PUBLIC_FILES}
     files["skills/mcfuke-validation/assets/lunch.recipe.json"] = files["examples/lunch.recipe.json"]
+    files["skills/mcfuke-validation/assets/flexible-cup.intent.json"] = files["examples/flexible-cup.intent.json"]
     files["downloads/mcfuke-validation.zip"] = build_skill().read_bytes()
-    share = share_recipe(load_recipe(ROOT / "examples/replacement.recipe.json"), ROOT / "dist/meal-share.zip")
+    share = share_recipe(load_recipe(ROOT / "examples/replacement.recipe.json"), ROOT / f"dist/meal-share-{version}.zip")
     files["downloads/meal-share.zip"] = share.read_bytes()
+    intent = json.loads((ROOT / "examples/flexible-cup.intent.json").read_text(encoding="utf-8"))
+    conditions = share_intent(intent, ROOT / f"dist/conditions-share-{version}.zip")
+    files["downloads/conditions-share.zip"] = conditions.read_bytes()
     for name, data in files.items():
         inspect_payload(name, data)
     manifest = {"format": "mcfuke.public-release.v1", "version": version,

@@ -30,6 +30,13 @@ class PackageTests(unittest.TestCase):
             result = subprocess.run(command + ["validate", "--recipe", str(root / "assets" / "lunch.recipe.json")],
                                     cwd=tmp, capture_output=True, text=True, encoding="utf-8", check=True, timeout=20)
             self.assertFalse(json.loads(result.stdout)["official_source_verified"])
+            review = root / "review.json"
+            result = subprocess.run(command + ["review", "--intent", str(root / "assets/flexible-cup.intent.json"),
+                                               "--output", str(review)], cwd=tmp, capture_output=True,
+                                    text=True, encoding="utf-8", check=True, timeout=20)
+            conditions = json.loads(review.read_text(encoding="utf-8"))
+            self.assertFalse(conditions["confirmed"])
+            self.assertEqual(conditions["must_keep"]["slots"][1]["options"], {"糖": "无糖"})
 
     def test_invalid_import_returns_failure_without_echoing_secrets(self):
         with tempfile.TemporaryDirectory() as tmp:
